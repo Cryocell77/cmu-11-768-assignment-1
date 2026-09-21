@@ -351,7 +351,35 @@ class Agent:
             # and handles the threshold, and tracks compaction events for
             # logging.
 
-            raise NotImplementedError
+            while not self.finished:
+                # Do not make more than 'step_limit' model calls.
+                if self.steps_taken >= self.step_limit:
+                    raise StepLimitError(
+                        f"Agent exceeded step limit of {self.step_limit}"
+                    )
+
+                # TODO(2.2) will eventually go here:
+
+                # 1. Ask the language model what to do next.
+                assistant_message = self.query_language_model()
+
+                # 2. Preserve the entire assistant message in conversation history.
+                self.history.append(deepcopy(assistant_message))
+
+                # 3. Extract any tool calls from the response.
+                tool_calls = assistant_message.get("tool_calls") or []
+
+                # A response without a tool call is still part of the conversation.
+                # Preserve it and let the model try again next turn.
+                if not tool_calls:
+                    continue
+
+                # 4. Let the domain-specific agent execute the request tools.
+                observations = self.execute_tool_calls(tool_calls)
+
+                # 5. Add tool results to history so the next LLM request can see them.
+                self.history.extend(deepcopy(observations))
+
         finally:
             # This block is provided infrastructure. Do not modify it: a
             # trajectory is required even when a run fails.
